@@ -9,7 +9,7 @@ import time
 import threading
 import uuid
 
-import base
+from suzunari import base
 
 # Public classes
 __all__ = ['Node']

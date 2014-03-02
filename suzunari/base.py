@@ -45,7 +45,7 @@ class Base(object):
 
     def elog(self, msg):
         try:
-            emsg = u"[ERROR] %s (%s)" % (msg, self._get_caller())
+            emsg = u"ERROR: %s (%s)" % (msg, self._get_caller())
             logging.error(emsg)
         except:
             pass
