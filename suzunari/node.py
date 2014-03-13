@@ -5,9 +5,8 @@
 Copyright 2013 masaki.noda@gmail.com
 """
 
-import time
-import threading
 import uuid
+import asyncio
 
 from suzunari import base
 
@@ -15,78 +14,55 @@ from suzunari import base
 __all__ = ['Node']
 
 # Node
-class Node(base.Base, threading.Thread):
+class Node(base.Base):
     """ Communication Node class """
 
     def __init__(self, debug_level=0):
         base.Base.__init__(self, debug_level)
-        threading.Thread.__init__(self)
-        self._id = uuid.uuid4()
-        self._stop_sign = False
-        self._peer = None
-        self.name = "%s:%s" % (self.__class__.__name__, str(self._id)[:8])
+        self.id = uuid.uuid4()
+        self.name = "%s:%s" % (self.__class__.__name__, str(self.id)[:8])
+        self.transport = None
 
-    def get_stop_sign(self):
-        return self._stop_sign
-    def set_stop_sign(self, val):
-        if val:
-            self._stop_sign = True
-        else:
-            self._stop_sign = False
-    stop_sign = property(get_stop_sign)
+    #
+    # asyncio interface
+    #
 
-    def run(self):
-        self.dlog("START thread: %s" % self.name)
-        self.set_stop_sign(False)
-        # loop_init
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def data_received(self, data):
         try:
-            if not self.loop_init():
-                self.elog("Loop init error %s" % (self.name))
-                self.set_stop_sign(True)
+            if data.startswith(b"STOP"):
+                self.stop()
         except:
             self.elog_exc()
-            self.set_stop_sign(True)
-        # loop
-        while not self.stop_sign:
-            try:
-                self.loop_proc()
-            except:
-                self.elog_exc()
-        # loop_clean
-        try:
-            self.loop_clean()
-        except:
-            self.elog_exc()
-        self.dlog("STOP thread: %s" % self.name)
 
-    def stop(self, wait=2.0):
-        self.set_stop_sign(True)
-        if not wait:
-            return
-        self.join(wait)
-        if self.is_alive():
-            self.elog("Join timed out %s" % self.name)
+    def eof_received(self):
+        self.transport.close()
 
-    def loop_init(self):
-        return True
+    def connection_lost(self, exc):
+        if exc:
+            self.elog(str(exc))
+        self.transport = None
 
-    def loop_proc(self):
-        self.dlog(".")
-        time.sleep(0.5)
+    #
+    # handler
+    #
 
-    def loop_clean(self):
-        return True
-
+    def stop(self):
+        loop = asyncio.get_event_loop()
+        loop.call_soon(loop.stop)
+ 
 
 #
 # Test
 #
 
 def main():
-    obj = Node(1)
-    obj.start()
-    time.sleep(3)
-    obj.stop()
+    loop = asyncio.get_event_loop()
+    asyncio.async(loop.create_server(Node, 'localhost', 8888))
+    loop.call_later(10, loop.stop)
+    loop.run_forever()
 
 if __name__ == '__main__':
     main()
